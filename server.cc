@@ -26,9 +26,11 @@ void Usage(char *progname);
 void PrintOut(int fd, struct sockaddr *addr, size_t addrlen);
 void PrintReverseDNS(struct sockaddr *addr, size_t addrlen);
 string ForwardDNS(string hostname);
-int  Listen(char *portnum);
+int  ListenTCP(char *portnum);
+int  ListenUDP(char *portnum);
 void *HandleClient(void *c_info);
-bool ReadPacketFromSocket(int fd, string *retstr);
+bool ReadPacketFromTCPSocket(int fd, string *retstr);
+bool ReadPacketFromUDPSocket(int fd, string *retstr);
 
 int main(int argc, char **argv) {
   // Expect the port number as a command line argument.
@@ -42,7 +44,7 @@ int main(int argc, char **argv) {
 //    Usage(argv[0]);
 //  }
   char port[] = "12235";
-  int listen_fd = Listen(&port[0]);
+  int listen_fd = ListenUDP(&port[0]);
   if (listen_fd <= 0) {
     // We failed to bind/listen to a socket.  Quit with failure.
     std::cerr << "Couldn't bind to any addresses." << std::endl;
@@ -77,7 +79,6 @@ int main(int argc, char **argv) {
   }
 
   // Close up shop.
-  close(listen_fd);
   return EXIT_SUCCESS;
 }
 
@@ -119,7 +120,92 @@ void PrintReverseDNS(struct sockaddr *addr, size_t addrlen) {
   std::cout << " DNS name: " << hostname << std::endl;
 }
 
-int Listen(char *portnum) {
+int ListenUDP(){
+  // Populate the "hints" addrinfo structure for getaddrinfo().
+  // ("man addrinfo")
+  struct addrinfo hints;
+  memset(&hints, 0, sizeof(struct addrinfo));
+  hints.ai_family = AF_UNSPEC;      // allow IPv4 or IPv6
+  hints.ai_socktype = SOCK_DGRAM;  // stream
+  hints.ai_flags = AI_PASSIVE;      // use wildcard "INADDR_ANY"
+  hints.ai_protocol = IPPROTO_UDP;  // tcp protocol
+  hints.ai_canonname = NULL;
+  hints.ai_addr = NULL;
+  hints.ai_next = NULL;
+
+  // Use argv[1] as the string representation of our portnumber to
+  // pass in to getaddrinfo().  getaddrinfo() returns a list of
+  // address structures via the output parameter "result".
+  struct addrinfo *result;
+  int res = getaddrinfo(NULL, portnum, &hints, &result);
+
+  // Did addrinfo() fail?
+  if (res != 0) {
+    std::cerr << "getaddrinfo() failed: ";
+    std::cerr << gai_strerror(res) << std::endl;
+    return -1;
+  }
+
+  // Loop through the returned address structures until we are able
+  // to create a socket and bind to one.  The address structures are
+  // linked in a list through the "ai_next" field of result.
+  int listen_fd = -1;
+  for (struct addrinfo *rp = result; rp != NULL; rp = rp->ai_next) {Z:
+    listen_fd = socket(rp->ai_family,
+                       rp->ai_socktype,
+                       rp->ai_protocol);
+    if (listen_fd == -1) {
+      // Creating this socket failed.  So, loop to the next returned
+      // result and try again.
+      std::cerr << "socket() failed: " << strerror(errno) << std::endl;
+      listen_fd = -1;
+      continue;
+    }
+
+    // Configure the socket; we're setting a socket "option."  In
+    // particular, we set "SO_REUSEADDR", which tells the TCP stack
+    // so make the port we bind to available again as soon as we
+    // exit, rather than waiting for a few tens of seconds to recycle it.
+    int optval = 1;
+    assert(setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR,
+                      &optval, sizeof(optval)) == 0);
+
+    // Try binding the socket to the address and port number returned
+    // by getaddrinfo().
+    if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
+      // Bind worked!  Print out the information about what
+      // we bound to.
+      PrintOut(listen_fd, rp->ai_addr, rp->ai_addrlen);
+      break;
+    }
+
+    // The bind failed.  Close the socket, then loop back around and
+    // try the next address/port returned by getaddrinfo().
+    close(listen_fd);
+    listen_fd = -1;
+  }
+
+  // Free the structure returned by getaddrinfo().
+  freeaddrinfo(result);
+
+  // If we failed to bind, return failure.
+  if (listen_fd <= 0)
+    return listen_fd;
+
+  // Success. Tell the OS that we want this to be a listening socket.
+  //  if (listen(listen_fd, SOMAXCONN) != 0) {
+  //   std::cerr << "Failed to mark socket as listening: ";
+  //   std::cerr << strerror(errno) << std::endl;
+  //   close(listen_fd);
+  //   return -1;
+  //  }
+
+  return listen_fd;
+}
+
+
+
+int ListenTCP(char *portnum) {
   // Populate the "hints" addrinfo structure for getaddrinfo().
   // ("man addrinfo")
   struct addrinfo hints;
@@ -213,9 +299,15 @@ void *HandleClient(void *c_fd) {
   // PrintReverseDNS((sockaddr *) &(cinfo.caddr), cinfo.caddr_len);
 
   // Loop, reading data and doing a DNS lookup on the content.
-  while (1) {
     string nextstr;
-    bool res = ReadPacketFromSocket(cinfo.fd, &nextstr);
+    bool res = ReadPacketFromUDPSocket(cinfo.fd, &nextstr);
+    
+    closesocket(cinfo.fd);
+    WSACleanup();
+
+
+
+    bool res = ReadPacketFromTCPSocket(cinfo.fd, &nextstr);
     if (!res) {
       std::cout << " [The client disconnected.]" << std::endl;
       break;
@@ -226,18 +318,31 @@ void *HandleClient(void *c_fd) {
     std::cout << "sending: " << retstr;
 
     write(cinfo.fd, retstr.c_str(), retstr.size());
-  }
 
   close(cinfo.fd);
   return NULL;
 }
+
+bool ReadPacketFromUDPSocket(int fd, String *retstr){
+  struct sockaddr_storage src_addr;
+  socklen_t src_addr_len=sizeof(src_addr);
+  ssize_t count=recvfrom(fd,buffer,sizeof(buffer),0,(struct sockaddr*)&src_addr,&src_addr_len);
+  if (count==-1) {
+      die("%s",strerror(errno));
+  } else if (count==sizeof(buffer)) {
+      warn("datagram too large for buffer: truncated");
+  } else {
+      handle_datagram(buffer,count);
+  }
+}
+
 
 // Reads characters from the socket "fd" until it spots
 // a newline or EOF.  Returns the read characters (minus the
 // newline) through "retstr".  Returns true if something was
 // read, false otherwise.  If returns false, customer should
 // close the socket.
-bool ReadPacketFromSocket(int fd, string *retstr) {
+bool ReadPacketFromTCPSocket(int fd, string *retstr) {
   // We won't try to make this efficient; we'll keep appending
   // single characters to a string until we hit EOF or newline.
   // This means that C++ will be making a *ton* of string copies
@@ -249,7 +354,7 @@ bool ReadPacketFromSocket(int fd, string *retstr) {
     unsigned char nextC;
     ssize_t res = read(fd, &nextC, 1);
     if (res == 1) {
-      // Stop on '\n' characters.
+      // Stop on '\0' characters.
       if (nextC == '\0') {
         // All done!
         *retstr = data;
@@ -259,17 +364,13 @@ bool ReadPacketFromSocket(int fd, string *retstr) {
       // Append the character.
       data.append(1, nextC);
       count++;
-      
-      // stop when there is 4 bytes
-      if (count ==  4) {
-        return true;
-      }
 
       continue;
     }
     if (res == 0) {
-      if (count == 0)
+      if (count == 0){
         return false;
+      }
       *retstr = data;
       return true;
     }
