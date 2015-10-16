@@ -1,4 +1,4 @@
-#include <arpa/inet.h>
+nclude <arpa/inet.h>
 #include <assert.h>
 #include <errno.h>
 #include <netdb.h>
@@ -14,113 +14,61 @@
 
 using std::string;
 
-// This structure stores information about a client that has
-// connected to us.
-typedef struct {
-  int fd;
-  struct sockaddr_storage caddr;
-  socklen_t caddr_len;
-} ClientInfo;
-
 void Usage(char *progname);
-void PrintOut(int fd, struct sockaddr *addr, size_t addrlen);
-void PrintReverseDNS(struct sockaddr *addr, size_t addrlen);
-string ForwardDNS(string hostname);
 int  ListenTCP(char *portnum);
 int  ListenUDP(char *portnum);
 void *HandleClient(void *c_info);
-bool ReadPacketFromTCPSocket(int fd, string *retstr);
-bool ReadPacketFromUDPSocket(int fd, string *retstr);
+bool ReadTCP(int fd, string *retstr);
+bool ReadUDP(int fd, string *retstr);
 
 int main(int argc, char **argv) {
-  // Expect the port number as a command line argument.
-  if (argc != 1) {
-    Usage(argv[0]);
-  }
+  int port = atoi("12235");
+  char buf[16];
 
-//  // Parse the port number, or fail.
-//  unsigned short port = 0;
-//  if (sscanf(argv[1], "%hu", &port) != 1) {
-//    Usage(argv[0]);
-//  }
-  char port[] = "12235";
   int listen_fd = ListenUDP(&port[0]);
   if (listen_fd <= 0) {
     // We failed to bind/listen to a socket.  Quit with failure.
     std::cerr << "Couldn't bind to any addresses." << std::endl;
     return EXIT_FAILURE;
   }
-
+  
+  clientlen = sizeof(clientaddr);
   // Loop forever, accepting client connections and dispatching them.
   while (1) {
-    // Allocate a "ClientInfo" structure to store information about
-    // the next client connection that we receive.  We'll hand this
-    // structure off to a thread that we dispatch to handle the
-    // client.
+    /*
+     * recvfrom: receive a UDP datagram from a client
+     */
+    bzero(buf, BUFSIZE);
     ClientInfo *cinfo = new ClientInfo;
     cinfo->caddr_len = sizeof(cinfo->caddr);
-    cinfo->fd = accept(listen_fd,
-                       reinterpret_cast<struct sockaddr *>(&(cinfo->caddr)),
-                       &(cinfo->caddr_len));
-    if (cinfo->fd < 0) {
-      if ((errno == EAGAIN) || (errno == EINTR)) {
-        delete cinfo;
-        continue;
-      }
-      std::cerr << "Failure on accept: " << strerror(errno) << std::endl;
-      delete cinfo;
-      break;
+    cinfo->fd = recvfrom(listen_fd, buf, 30, 0, reinterpret_cast<struct sockaddr *>(&(cinfo->caddr)), &(cinfo->caddr_len));
+    if (cinfo->fd < 0){
+      error("ERROR in recvfrom");
     }
+    // check if the packet is vaild packet
+    
+    // make return packet
+     
+    // sendto: echo the input back to the client 
+    
+    cinfo->fd = sendto(listen_fd, buf, strlen(buf), 0, reinterpret_cast<struct sockaddr *>(&(cinfo->caddr)), &(cinfo->caddr_len));
+    if (cinfo->fd < 0) {
+      error("ERROR in sendto");
+    }
+
 
     // Dispatch a thread to handle this file descriptor.
     pthread_t thr;
     assert(pthread_create(&thr, NULL, HandleClient, (void *) cinfo) == 0);
     assert(pthread_detach(thr) == 0);
+
   }
 
   // Close up shop.
   return EXIT_SUCCESS;
 }
 
-void Usage(char *progname) {
-  std::cerr << "usage: " << progname << " port" << std::endl;
-  exit(EXIT_FAILURE);
-}
-
-void PrintOut(int fd, struct sockaddr *addr, size_t addrlen) {
-  std::cout << "Socket [" << fd << "] is bound to:" << std::endl;
-  if (addr->sa_family == AF_INET) {
-    // Print out the IPV4 address and port
-
-    char astring[INET_ADDRSTRLEN];
-    struct sockaddr_in *in4 = reinterpret_cast<struct sockaddr_in *>(addr);
-    inet_ntop(AF_INET, &(in4->sin_addr), astring, INET_ADDRSTRLEN);
-    std::cout << " IPv4 address " << astring;
-    std::cout << " and port " << htons(in4->sin_port) << std::endl;
-
-  } else if (addr->sa_family == AF_INET6) {
-    // Print out the IPV4 address and port
-
-    char astring[INET6_ADDRSTRLEN];
-    struct sockaddr_in6 *in6 = reinterpret_cast<struct sockaddr_in6 *>(addr);
-    inet_ntop(AF_INET, &(in6->sin6_addr), astring, INET6_ADDRSTRLEN);
-    std::cout << " IPv6 address " << astring;
-    std::cout << " and port " << htons(in6->sin6_port) << std::endl;
-
-  } else {
-    std::cout << " ???? address and port ????" << std::endl;
-  }
-}
-
-void PrintReverseDNS(struct sockaddr *addr, size_t addrlen) {
-  char hostname[1024];  // ought to be big enough.
-  if (getnameinfo(addr, addrlen, hostname, 1024, NULL, 0, 0) != 0) {
-    sprintf(hostname, "[reverse DNS failed]");
-  }
-  std::cout << " DNS name: " << hostname << std::endl;
-}
-
-int ListenUDP(){
+int ListenUDP(char *portnum){
   // Populate the "hints" addrinfo structure for getaddrinfo().
   // ("man addrinfo")
   struct addrinfo hints;
@@ -129,91 +77,6 @@ int ListenUDP(){
   hints.ai_socktype = SOCK_DGRAM;  // stream
   hints.ai_flags = AI_PASSIVE;      // use wildcard "INADDR_ANY"
   hints.ai_protocol = IPPROTO_UDP;  // tcp protocol
-  hints.ai_canonname = NULL;
-  hints.ai_addr = NULL;
-  hints.ai_next = NULL;
-
-  // Use argv[1] as the string representation of our portnumber to
-  // pass in to getaddrinfo().  getaddrinfo() returns a list of
-  // address structures via the output parameter "result".
-  struct addrinfo *result;
-  int res = getaddrinfo(NULL, portnum, &hints, &result);
-
-  // Did addrinfo() fail?
-  if (res != 0) {
-    std::cerr << "getaddrinfo() failed: ";
-    std::cerr << gai_strerror(res) << std::endl;
-    return -1;
-  }
-
-  // Loop through the returned address structures until we are able
-  // to create a socket and bind to one.  The address structures are
-  // linked in a list through the "ai_next" field of result.
-  int listen_fd = -1;
-  for (struct addrinfo *rp = result; rp != NULL; rp = rp->ai_next) {Z:
-    listen_fd = socket(rp->ai_family,
-                       rp->ai_socktype,
-                       rp->ai_protocol);
-    if (listen_fd == -1) {
-      // Creating this socket failed.  So, loop to the next returned
-      // result and try again.
-      std::cerr << "socket() failed: " << strerror(errno) << std::endl;
-      listen_fd = -1;
-      continue;
-    }
-
-    // Configure the socket; we're setting a socket "option."  In
-    // particular, we set "SO_REUSEADDR", which tells the TCP stack
-    // so make the port we bind to available again as soon as we
-    // exit, rather than waiting for a few tens of seconds to recycle it.
-    int optval = 1;
-    assert(setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR,
-                      &optval, sizeof(optval)) == 0);
-
-    // Try binding the socket to the address and port number returned
-    // by getaddrinfo().
-    if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-      // Bind worked!  Print out the information about what
-      // we bound to.
-      PrintOut(listen_fd, rp->ai_addr, rp->ai_addrlen);
-      break;
-    }
-
-    // The bind failed.  Close the socket, then loop back around and
-    // try the next address/port returned by getaddrinfo().
-    close(listen_fd);
-    listen_fd = -1;
-  }
-
-  // Free the structure returned by getaddrinfo().
-  freeaddrinfo(result);
-
-  // If we failed to bind, return failure.
-  if (listen_fd <= 0)
-    return listen_fd;
-
-  // Success. Tell the OS that we want this to be a listening socket.
-  //  if (listen(listen_fd, SOMAXCONN) != 0) {
-  //   std::cerr << "Failed to mark socket as listening: ";
-  //   std::cerr << strerror(errno) << std::endl;
-  //   close(listen_fd);
-  //   return -1;
-  //  }
-
-  return listen_fd;
-}
-
-
-
-int ListenTCP(char *portnum) {
-  // Populate the "hints" addrinfo structure for getaddrinfo().
-  // ("man addrinfo")
-  struct addrinfo hints;
-  memset(&hints, 0, sizeof(struct addrinfo));
-  hints.ai_family = AF_UNSPEC;      // allow IPv4 or IPv6
-  hints.ai_socktype = SOCK_STREAM;  // stream
-  hints.ai_flags = AI_PASSIVE;      // use wildcard "INADDR_ANY"
-  hints.ai_protocol = IPPROTO_TCP;  // tcp protocol
   hints.ai_canonname = NULL;
   hints.ai_addr = NULL;
   hints.ai_next = NULL;
@@ -247,14 +110,6 @@ int ListenTCP(char *portnum) {
       continue;
     }
 
-    // Configure the socket; we're setting a socket "option."  In
-    // particular, we set "SO_REUSEADDR", which tells the TCP stack
-    // so make the port we bind to available again as soon as we
-    // exit, rather than waiting for a few tens of seconds to recycle it.
-    int optval = 1;
-    assert(setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR,
-                      &optval, sizeof(optval)) == 0);
-
     // Try binding the socket to the address and port number returned
     // by getaddrinfo().
     if (bind(listen_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
@@ -269,163 +124,7 @@ int ListenTCP(char *portnum) {
     close(listen_fd);
     listen_fd = -1;
   }
-
   // Free the structure returned by getaddrinfo().
   freeaddrinfo(result);
-
-  // If we failed to bind, return failure.
-  if (listen_fd <= 0)
-    return listen_fd;
-
-  // Success. Tell the OS that we want this to be a listening socket.
-  if (listen(listen_fd, SOMAXCONN) != 0) {
-    std::cerr << "Failed to mark socket as listening: ";
-    std::cerr << strerror(errno) << std::endl;
-    close(listen_fd);
-    return -1;
-  }
-
   return listen_fd;
-}
-
-void *HandleClient(void *c_fd) {
-  ClientInfo cinfo = *((ClientInfo *) c_fd);
-  delete ((ClientInfo *) c_fd);
-
-  // Print out information about the client.
-  std::cout << std::endl;
-  std::cout << "New client connection" << std::endl;
-  // PrintOut(cinfo.fd, (sockaddr *) &(cinfo.caddr), cinfo.caddr_len);
-  // PrintReverseDNS((sockaddr *) &(cinfo.caddr), cinfo.caddr_len);
-
-  // Loop, reading data and doing a DNS lookup on the content.
-    string nextstr;
-    bool res = ReadPacketFromUDPSocket(cinfo.fd, &nextstr);
-    
-    closesocket(cinfo.fd);
-    WSACleanup();
-
-
-
-    bool res = ReadPacketFromTCPSocket(cinfo.fd, &nextstr);
-    if (!res) {
-      std::cout << " [The client disconnected.]" << std::endl;
-      break;
-    }
-    
-    std::cout << " the client sent: " << nextstr << std::endl;
-    string retstr = ForwardDNS(nextstr);
-    std::cout << "sending: " << retstr;
-
-    write(cinfo.fd, retstr.c_str(), retstr.size());
-
-  close(cinfo.fd);
-  return NULL;
-}
-
-bool ReadPacketFromUDPSocket(int fd, String *retstr){
-  struct sockaddr_storage src_addr;
-  socklen_t src_addr_len=sizeof(src_addr);
-  ssize_t count=recvfrom(fd,buffer,sizeof(buffer),0,(struct sockaddr*)&src_addr,&src_addr_len);
-  if (count==-1) {
-      die("%s",strerror(errno));
-  } else if (count==sizeof(buffer)) {
-      warn("datagram too large for buffer: truncated");
-  } else {
-      handle_datagram(buffer,count);
-  }
-}
-
-
-// Reads characters from the socket "fd" until it spots
-// a newline or EOF.  Returns the read characters (minus the
-// newline) through "retstr".  Returns true if something was
-// read, false otherwise.  If returns false, customer should
-// close the socket.
-bool ReadPacketFromTCPSocket(int fd, string *retstr) {
-  // We won't try to make this efficient; we'll keep appending
-  // single characters to a string until we hit EOF or newline.
-  // This means that C++ will be making a *ton* of string copies
-  // along the way.
-  string data;
-  int count = 0;
-
-  while (1) {
-    unsigned char nextC;
-    ssize_t res = read(fd, &nextC, 1);
-    if (res == 1) {
-      // Stop on '\0' characters.
-      if (nextC == '\0') {
-        // All done!
-        *retstr = data;
-        return true;
-      }
-      
-      // Append the character.
-      data.append(1, nextC);
-      count++;
-
-      continue;
-    }
-    if (res == 0) {
-      if (count == 0){
-        return false;
-      }
-      *retstr = data;
-      return true;
-    }
-    if (res == -1) {
-      if ((errno == EINTR) || (errno == EAGAIN))
-        continue;
-      // Unrecoverable error.
-      return false;
-    }
-  }
-
-  // should never get here.
-  assert(0);
-  return false;
-}
-
-string ForwardDNS(string hostname) {
-  // Try to do a forward DNS lookup on the given hostname.
-  int retval;
-  struct addrinfo hints, *results, *r;
-  memset(&hints, 0, sizeof(struct addrinfo));
-  hints.ai_family = AF_UNSPEC;
-  hints.ai_socktype = SOCK_STREAM;
-  if ((retval = getaddrinfo(hostname.c_str(),
-                            NULL,
-                            &hints,
-                            &results) != 0)) {
-    return (string("[dns lookup of '") + hostname + "' failed.\n");
-  }
-  string retstr;
-  for (r = results; r != NULL; r = r->ai_next) {
-    std::cout << r->ai_flags << std::endl;
-    std::cout << r->ai_family << std::endl;
-    std::cout << r->ai_socktype << std::endl;
-    std::cout << r->ai_protocol << std::endl;
-    std::cout << r->ai_addrlen << std::endl;
-    if (r->ai_family == AF_INET) {
-      char ipstring[INET_ADDRSTRLEN];
-      struct sockaddr_in *v4addr = (struct sockaddr_in *) r->ai_addr;
-      std::cout << v4addr->sin_family << std::endl;
-      std::cout << v4addr->sin_port << std::endl;
-      inet_ntop(r->ai_family,
-                &(v4addr->sin_addr),
-                ipstring,
-                INET_ADDRSTRLEN);
-      retstr += string("  IPv4: ") + ipstring + "\n";
-    } else {
-      char ipstring[INET6_ADDRSTRLEN];
-      struct sockaddr_in6 *v6addr = (struct sockaddr_in6 *) r->ai_addr;
-      inet_ntop(r->ai_family,
-                &(v6addr->sin6_addr),
-                ipstring,
-                INET6_ADDRSTRLEN);
-      retstr += string("  IPv6: ") + ipstring + "\n";
-    }
-  }
-  return retstr;
 }
