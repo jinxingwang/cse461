@@ -28,7 +28,9 @@ public class Client {
   }
   
   
-  // creates the header and puts in
+  // creates the header and pads the content returning a new byte[]
+  // in the proper format. The secret is 4bytes (int), the step
+  // is 2 bytes (short).
   public static byte[] createBuffer(byte[] content, int secret, short step) {
 	  int headerSize = 12;
 	  short studentNum = 456; // my student number is 1340456
