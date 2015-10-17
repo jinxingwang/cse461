@@ -1,3 +1,8 @@
+/*
+ * Jinxing Wang and Tad Perry
+ * 
+ * CSE 461 Project 1 Stage 1
+ */
 
 import java.io.*;
 import java.net.*;
@@ -5,6 +10,7 @@ import java.nio.*;
 import java.lang.*;
 import java.util.*;
 
+// This class handles the Client side of Project 1
 public class Client {
   public static void main(String[] args) throws Exception {
 	  int portNum = 12235;
@@ -20,12 +26,32 @@ public class Client {
 	  
 	  packet = new DatagramPacket(response, response.length);
 	  sock.receive(packet);
-	  for (int i = 0; i < 20; i++) {
-		  System.out.println("" + response[i]);
+	  int[] a2 = partA(response);
+	  for (int i = 0; i < a2.length; i++) {
+		  System.out.println(a2[i]);
 	  }
-//	  String got = new String(packet.getData(), 0, packet.getLength());
-//	  System.out.println("GOT " + packet.getData());
   }
+  
+  
+  // Takes the byte array received from the server and parses.
+  // The server responds with a UDP packet containing 4 integers. The
+  // integer array returned contains has those 4 integers.
+  public static int[] partA(byte[] response) {
+	  ByteBuffer bb = ByteBuffer.wrap(response);
+	  int payload_len = bb.getInt();
+	  int psecret = bb.getInt();
+	  short step = bb.getShort();
+	  if (step != 2) {
+		  System.out.println("Something is wrong, step = " + step + " when it should equal 2");
+	  }
+	  short id = bb.getShort();
+	  int[] res = new int[4];
+	  for (int i = 0; i < res.length; i++) {
+		  res[i] = bb.getInt();
+	  }
+	  return res;
+  }
+  
   
   
   // creates the header and pads the content returning a new byte[]
@@ -45,7 +71,5 @@ public class Client {
 	  bb.putShort(studentNum);
 	  bb.put(content);
 	  return bb.array();
-  }
-  
-  
+  } 
 }
