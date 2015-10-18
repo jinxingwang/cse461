@@ -166,9 +166,37 @@ public class Server {
     }
 
     private boolean stageD(){
-      System.out.println("+++++++++++++++++++++++++++++Stage A+++++++++++++++++++++++++++++");
-      xPacket packet = null;
-      return true; 
+      System.out.println("+++++++++++++++++++++++++++++Stage D+++++++++++++++++++++++++++++");
+
+      try {
+        for(int i = 0; i < num; i++){
+          byte[] res = readBytes(((HEADER_LEN + len + 3) / 4) * 4);
+          if(res == null || !checkHeader(res, len,(short) 1)){
+            return false;
+          }
+          xPacket packet = new xPacket(ByteBuffer.wrap(res));
+          ByteBuffer payload = ByteBuffer.wrap(packet.payload);
+          for (int j = 0; j < len; j++){
+            if (payload.get() != (byte)'c'){
+              return false;
+            }
+          }
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
+        return false;
+      }
+     
+      secretD = rnum.nextInt();
+      
+      ByteBuffer buf = ByteBuffer.allocate(4);
+      buf.putInt(secretD);
+
+      try{
+        sendBytes(createBuffer(buf.array(), 4, (short) 2));
+      } catch (Exception e) {e.printStackTrace();}
+
+      return true;
     }
 
     public byte[] createBuffer(byte[] content, int len, short step) {
@@ -250,6 +278,21 @@ public class Server {
         dos.write(bytes, 0, bytes.length);
         dos.flush();
       } catch (Exception e) {e.printStackTrace();}
+    }
+
+    public byte[] readBytes(int len) throws IOException {
+      System.out.println("in readBytes");
+      // Again, probably better to store these objects references in the support class
+      InputStream in = tcpSock.getInputStream();
+      DataInputStream dis = new DataInputStream(in);
+      byte[] data = new byte[len];
+      System.out.println("is connected = " + tcpSock.isConnected());
+      try {
+          dis.readFully(data);
+      } catch(Exception e) {
+          return null;
+      }
+      return data;
     }
 
     private class xPacket {
