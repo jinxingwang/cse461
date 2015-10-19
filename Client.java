@@ -7,7 +7,6 @@
 import java.io.*;
 import java.net.*;
 import java.nio.*;
-import java.lang.*;
 import java.util.*;
 
 // This class handles the Client side of Project 1
@@ -26,11 +25,102 @@ public class Client {
 	  
 	  packet = new DatagramPacket(response, response.length);
 	  sock.receive(packet);
+//	  sock.close();
 	  int[] a2 = partA(response);
-	  for (int i = 0; i < a2.length; i++) {
-		  System.out.println(a2[i]);
+//	  for (int i = 0; i < a2.length; i++) {
+//		  System.out.println(a2[i]);
+//	  }
+	  int numSent = 0;
+	  int send = a2[0];
+	  int len = a2[1];
+	  portNum = a2[2];
+	  int secretA = a2[3];
+	  
+	  //////////////////////part2/////////////////////////////////////////
+//	  sock = new DatagramSocket();
+	  sock.setSoTimeout(500); // .5s
+
+//	  sock.connect(ip, portNum);
+//	  response = new byte[16]; // header + int size
+	  // DatagramPacket resPack = new DatagramPacket(response, response.length);
+	  while (numSent < send) {
+		  // create packet
+		  buf = createBuffer(partB(numSent, len), secretA, (short)1);
+		  packet = new DatagramPacket(buf, buf.length, ip, portNum);
+		  sock.send(packet);
+		  // send packet
+		  try {
+			  sock.receive(new DatagramPacket(response, response.length));
+			  numSent++;
+			  ByteBuffer temp = ByteBuffer.wrap(response);
+			  temp.getInt();
+			  temp.getInt();
+			  temp.getInt();
+//			  System.out.println(temp.getInt());  // For debug. See if counts up by 1
+		  } catch (SocketTimeoutException e) {
+			  continue;
+		  }
 	  }
+	  response = new byte[20];
+	  sock.receive(new DatagramPacket(response, response.length));
+	  ByteBuffer bb = ByteBuffer.wrap(response);
+	  // Header
+	  bb.getInt();
+	  bb.getInt();
+	  bb.getShort();
+	  bb.getShort();
+	  // data sent
+	  portNum = bb.getInt();
+	  int secretB = bb.getInt();
+//	  System.out.println(portNum);
+//	  System.out.println(secretB);
+	  sock.close();
+	  Socket socket = new Socket(ip, portNum);
+	  InputStream in = socket.getInputStream();
+	  OutputStream out = socket.getOutputStream();
+	  response = new byte[12 + 16]; // 4 ints given to us this time
+	  in.read(response);
+	  bb = ByteBuffer.wrap(response);
+	  // Header
+	  bb.getInt();
+	  bb.getInt();
+	  bb.getInt();
+	  // num2 len2 secretC and char c
+	  
+	  numSent = bb.getInt();
+	  len = bb.getInt();
+	  int secretC = bb.getInt();
+	  // stage d
+	  byte c = (byte)bb.getChar();
+	  buf = new byte[len];
+	  Arrays.fill(buf, c);
+	  for (int i = 0; i < numSent; i++) {
+		  byte[] b = createBuffer(buf, secretC, (short)1);
+		  out.write(b);
+	  }
+	  response = new byte[12 + 4]; // one integer. secretD plus header
+	  in.read(response);
+	  bb = ByteBuffer.wrap(response);
+	  bb.getInt();
+	  bb.getInt();
+	  bb.getInt();
+	  int secretD = bb.getInt();
+	  socket.close();
+	  in.close();
+	  out.close();
+	  System.out.println("I did it all yo if this is read " + secretD);
   }
+  
+  
+  
+  
+  // returns byte array of content meant to be sent in packet b1
+  public static byte[] partB(int packet_id, int len) {
+	  ByteBuffer bb = ByteBuffer.allocate(len + 4);
+	  bb.putInt(packet_id);
+	  return bb.array();
+  }
+  
   
   
   // Takes the byte array received from the server and parses.
