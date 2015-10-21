@@ -19,6 +19,7 @@ public class Client {
 		////////////////////STAGE A//////////////////////////////////////////
 		int portNum = 12235;
 		InetAddress ip=InetAddress.getByName("attu2.cs.washington.edu");
+    //InetAddress ip=InetAddress.getLocalHost();;
 		DatagramSocket sock = new DatagramSocket();
 
 		byte[] response = new byte[HEADER_SIZE + 16];
@@ -104,7 +105,8 @@ public class Client {
 		response = new byte[12 + 4]; // one integer. secretD plus header
 		in.read(response);
 		bb = ByteBuffer.wrap(response);
-		bb.getInt();
+		int payloadLen =  bb.getInt();
+	System.out.println("payload len of part d is:" + payloadLen);
 		bb.getInt();
 		bb.getInt();
 		int secretD = bb.getInt();
