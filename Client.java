@@ -18,7 +18,7 @@ public class Client {
 	public static void main(String[] args) throws Exception {
 		////////////////////STAGE A//////////////////////////////////////////
 		int portNum = 12235;
-		InetAddress ip=InetAddress.getByName("attu2.cs.washington.edu");
+		InetAddress ip=InetAddress.getByName("tadrip@attu4.cs.washington.edu");
 		DatagramSocket sock = new DatagramSocket();
 
 		byte[] response = new byte[HEADER_SIZE + 16];
@@ -42,6 +42,8 @@ public class Client {
 		int len = a2[1];
 		portNum = a2[2];
 		int secretA = a2[3];
+		System.out.println("The secrets:\nA: " + secretA);
+
 		sock.setSoTimeout(500); // .5s
 
 		while (numSent < send) {
@@ -54,9 +56,7 @@ public class Client {
 				sock.receive(new DatagramPacket(response, response.length));
 				numSent++;
 				ByteBuffer temp = ByteBuffer.wrap(response);
-				temp.getInt();
-				temp.getInt();
-				temp.getInt();
+				checkHeader(temp, 4, secretA, STEP1);
 				//			  System.out.println(temp.getInt());  // For debug. See if counts up by 1
 			} catch (SocketTimeoutException e) {
 				// if there's a timeout, try again
@@ -67,13 +67,13 @@ public class Client {
 		sock.receive(new DatagramPacket(response, response.length));
 		ByteBuffer bb = ByteBuffer.wrap(response);
 		// Header
-		bb.getInt();
-		bb.getInt();
-		bb.getShort();
-		bb.getShort();
+		checkHeader(bb, 8, secretA, STEP2);
+
 		// reset the port number to the one given
 		portNum = bb.getInt();
 		int secretB = bb.getInt();
+		System.out.println("B: " + secretB);
+
 		// close the UDP socket
 		sock.close();
 
@@ -85,14 +85,15 @@ public class Client {
 		in.read(response);
 		bb = ByteBuffer.wrap(response);
 		// Header
-		bb.getInt();
-		bb.getInt();
-		bb.getInt();
+		checkHeader(bb, 13, secretB, STEP2);
+
 		// num2 len2 secretC and char c
 
 		numSent = bb.getInt();
 		len = bb.getInt();
 		int secretC = bb.getInt();
+		System.out.println("C: " + secretC);
+
 		// stage d
 		byte c = (byte)bb.getChar();
 		buf = new byte[len];
@@ -104,16 +105,12 @@ public class Client {
 		response = new byte[12 + 4]; // one integer. secretD plus header
 		in.read(response);
 		bb = ByteBuffer.wrap(response);
-		bb.getInt();
-		bb.getInt();
-		bb.getInt();
+		checkHeader(bb, 4, secretC, STEP2);
+
 		int secretD = bb.getInt();
 		socket.close();
 		in.close();
 		out.close();
-		System.out.println("The secrets:\nA: " + secretA);
-		System.out.println("B: " + secretB);
-		System.out.println("C: " + secretC);
 		System.out.println("D: " + secretD);
 	}
 
@@ -127,6 +124,22 @@ public class Client {
 		return bb.array();
 	}
 
+	public static void checkHeader(ByteBuffer b, int length, int psecret, short step) {
+		int l = b.getInt();
+		int ps = b.getInt();
+		int s = b.getShort();
+		b.getShort(); // the student number, which I am not checking.
+		if (l != length) {
+			System.out.println("Packet length was " + l + " instead of " + length);
+		}
+		if (ps != psecret) {
+			System.out.println("Psecret was " + ps + " instead of " + psecret);
+		}
+		if (s != step) {
+			System.out.println("Packet length was " + s + " instead of " + step);
+		}
+	}
+
 
 
 	// Takes the byte array received from the server and parses.
@@ -134,13 +147,7 @@ public class Client {
 	// integer array returned contains has those 4 integers.
 	public static int[] partA(byte[] response) {
 		ByteBuffer bb = ByteBuffer.wrap(response);
-		int payload_len = bb.getInt();
-		int psecret = bb.getInt();
-		short step = bb.getShort();
-		if (step != 2) {
-			System.out.println("Something is wrong, step = " + step + " when it should equal 2");
-		}
-		short id = bb.getShort();
+		checkHeader(bb, 16, 0, STEP2);
 		int[] res = new int[4];
 		for (int i = 0; i < res.length; i++) {
 			res[i] = bb.getInt();
