@@ -1,5 +1,5 @@
-group members: Jinxing Wang (1468230)
-               Tadrill Perry (1340456)
+group members: Jinxing Wang (wjx)
+               Tadrill Perry (tadrip)
 
 how to run the code:
 
