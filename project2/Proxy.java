@@ -120,6 +120,7 @@ public class Proxy {
           editedReq += "\r\n";
           editedReq += request; // build up header to send to server
         }
+        editedReq += "\r\n\r\n";
       } catch (IOException e) {
         e.printStackTrace();
       }
@@ -135,16 +136,37 @@ public class Proxy {
       } catch (IOException e) {
         e.printStackTrace();
       }
-      OutputStreamWriter toServer = new OutputStreamWriter(hostOut);
+/*      // OutputStreamWriter toServer = new OutputStreamWriter(hostOut);
       // Send the header to the url.
       for (int i = 0; i < editedReq.length(); i++) {
         try {
           System.out.print(editedReq.charAt(i));
-          toServer.write((int)editedReq.charAt(i));
+           toServer.write((int)editedReq.charAt(i));
         } catch (IOException e) {
           e.printStackTrace();
         }
+      }*/
+
+      // OutputStreamWriter toServer = new OutputStreamWriter(hostOut);
+      // Send the header to the url.
+     byte[] req = editedReq.getBytes();
+      try {
+        hostOut.write(req, 0, req.length);
+        hostOut.flush();
+      } catch (IOException e) {
+        e.printStackTrace();
       }
+
+
+      byte[] buffer = new byte[2048];
+      int bytes_read;
+      try {
+        while((bytes_read = hostIn.read(buffer)) != -1) {
+          System.out.print(buffer);
+          // clientOut.write(buffer, 0, bytes_read);
+          // clientOut.flush();
+        }
+      }catch (IOException e) {}
 
     }
   }
