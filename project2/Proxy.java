@@ -34,6 +34,7 @@ public class Proxy {
 
       while (true) {
         // listen and accept connections
+    	  
         Socket sock = socket.accept();
         // use Uhandler to handle each connection
         Thread thread = new Thread(new uHandler(sock));
@@ -115,17 +116,18 @@ public class Proxy {
               portNum = Integer.parseInt(splitted[1]);
             }
           }
-          if (!request.equals("\n"))
-            editedReq += "\n";
+          // Add the newline at the end of the line
+          editedReq += "\r\n";
           editedReq += request; // build up header to send to server
         }
       } catch (IOException e) {
         e.printStackTrace();
       }
+      
       Socket socket = null;
       InputStream hostIn = null;
       OutputStream hostOut = null;
-//////////////////////////////////////////////////////////////////////////
+
       try {
         socket = new Socket(url, portNum);
         hostIn = socket.getInputStream();
@@ -143,26 +145,7 @@ public class Proxy {
           e.printStackTrace();
         }
       }
-      try {
-        toServer.write((int)'\n');
-      } catch (IOException e2) {
-      // TODO Auto-generated catch block
-        e2.printStackTrace();
-      }
 
-
-      try {
-        System.out.println(" I am here " + hostIn.read());
-      } catch (IOException e1) {
-      // TODO Auto-generated catch block
-      e1.printStackTrace();
-      }
-      in = new BufferedReader(new InputStreamReader(hostIn));
-      try {
-        in.readLine();
-      } catch (IOException e) {
-        e.printStackTrace();
-      }
     }
   }
 }
