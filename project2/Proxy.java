@@ -77,22 +77,39 @@ public class Proxy {
       // Buffered reader to read header line by line
       BufferedReader in = new BufferedReader(new InputStreamReader(clientIn));
       String request = "";
-      try {
-        request = in.readLine();
-      } catch (IOException e) {
-        e.printStackTrace();
+      while(request.length() > 2){
+        try {
+          request = in.readLine();
+        } catch (IOException e) {
+          e.printStackTrace();
+        }
       }
 
+      // HTTP CONNECT tunneling
+      if(request.substring(0,7).equalsIgnoreCase("connect")){
+        System.out.println(request);
+        // tunnel(clientIn,clientOut,request);
+        // close socket
+        try{
+          clientIn.close();
+          clientOut.close();
+          con.close();
+        } catch (IOException e) { /* failed */ }
+        return;
+      }
+
+      // get current time for print out
+      Date d = new Date();
+      // formate current time
+      SimpleDateFormat ft = new SimpleDateFormat("dd MMM hh:mm:ss");
+
       // change version number to 1.0
-      System.out.println("The request is " + request);
+      // System.out.println("The request is " + request);
       String editedReq = request.substring(0, request.length() - 1);
       editedReq += "0";
       // Print out first line
-      System.out.println(">>> " + editedReq);
-
-      // HTTP CONNECT tunneling
-      if(editedReq.substring(0,7).equalsIgnoreCase("connect")){
-        
+      if(editedReq.substring(0,3).equalsIgnoreCase("get")){
+        System.out.println(ft.format(d) + " - >>> " + editedReq.substring(0,editedReq.length() - 8));
       }
 
       String url = "";
@@ -139,19 +156,7 @@ public class Proxy {
       } catch (IOException e) {
         e.printStackTrace();
       }
-/*      // OutputStreamWriter toServer = new OutputStreamWriter(hostOut);
-      // Send the header to the url.
-      for (int i = 0; i < editedReq.length(); i++) {
-        try {
-          System.out.print(editedReq.charAt(i));
-           toServer.write((int)editedReq.charAt(i));
-        } catch (IOException e) {
-          e.printStackTrace();
-        }
-      }*/
-
-      // OutputStreamWriter toServer = new OutputStreamWriter(hostOut);
-      // Send the header to the url.
+     
      byte[] req = editedReq.getBytes();
       try {
         hostOut.write(req, 0, req.length);
@@ -159,48 +164,30 @@ public class Proxy {
       } catch (IOException e) {
         e.printStackTrace();
       }
-      while (true) tunnel(hostOut, clientOut, hostIn, clientIn);
 
-//      byte[] buffer = new byte[2048];
-//      int bytes_read;
-//      try {
-//        while((bytes_read = hostIn.read(buffer)) != -1) {
-////          System.out.print(buffer);
-//           clientOut.write(buffer, 0, bytes_read);
-//           clientOut.flush();
-//        }
-//      }catch (IOException e) {}
-//      try {
-//          while((bytes_read = clientIn.read(buffer)) != -1) {
-//            System.out.print(buffer);
-//             clientIn.read(buffer, 0, bytes_read);
-//          }
-//      }catch (IOException e) {}
-  
-//      for (int i = 0; i < 2048; i++) {
-//    	  System.out.print("" + (char)buffer[i]);
-//      }
-    }
-    private void tunnel(OutputStream hostOut, OutputStream clientOut,
-    		InputStream hostIn, InputStream clientIn) {
-        byte[] buffer = new byte[2048];
-        int bytes_read;
-        // write out to client from server
-        try {
-          while((bytes_read = hostIn.read(buffer)) != -1) {
-//            System.out.print(buffer);
-             clientOut.write(buffer, 0, bytes_read);
-             clientOut.flush();
+      byte[] buffer = new byte[2048];
+      int bytes_read;
+      try {
+        while((bytes_read = hostIn.read(buffer)) != -1) {
+//          System.out.print(buffer);
+           clientOut.write(buffer, 0, bytes_read);
+           clientOut.flush();
+        }
+      }catch (IOException e) {}
+      try {
+          while((bytes_read = clientIn.read(buffer)) != -1) {
+            System.out.print(buffer);
+             clientIn.read(buffer, 0, bytes_read);
           }
-        }catch (IOException e) {}
-        // write out to host from client
-        try {
-            while((bytes_read = clientIn.read(buffer)) != -1) {
-              System.out.print(buffer);
-               hostOut.write(buffer, 0, bytes_read);
-               hostOut.flush();
-            }
-        }catch (IOException e) {}
+      }catch (IOException e) {}
+      try{
+        clientIn.close();
+        clientOut.close();
+        con.close();
+      } catch (IOException e) { /* failed */ }
+
+    }
+    private void tunnel(OutputStream clientIn,InputStream clientOut, String request) {
     }
   }
 }
