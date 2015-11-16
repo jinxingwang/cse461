@@ -74,28 +74,34 @@ public class Proxy {
 
       // Buffered reader to read header line by line
       BufferedReader in = new BufferedReader(new InputStreamReader(clientIn));
-      String request = "";
-      while(request.length() > 2){
+      while(true){
+      String url = "";
+      String request = null;
+      while(request == null){
         try {
           request = in.readLine();
         } catch (IOException e) {
           e.printStackTrace();
         }
       }
+      
 
       // HTTP CONNECT tunneling
       if(request.substring(0,7).equalsIgnoreCase("connect")){
         System.out.println(request);
-        // tunnel(clientIn,clientOut,request);
+        tunnel(clientIn,clientOut,request);
         // close socket
-        try{
-          clientIn.close();
-          clientOut.close();
-          clientSocket.close();
-          System.out.println(" tunneling connection closed");
-        } catch (IOException e) { /* failed */ }
-        return;
+        System.out.println(" tunneling connection closed");
+        break;
       }
+      
+      // get addr and port
+      String[] splitted = request.split(" ");
+      if( splitted.length < 2){
+        System.out.println("wrong CONNECT request format");
+        continue;
+      }
+      url = splitted[1];
 
       // get current time for print out
       Date d = new Date();
@@ -111,7 +117,6 @@ public class Proxy {
         System.out.println(ft.format(d) + " - >>> " + editedReq.substring(0,editedReq.length() - 8));
       }
 
-      String url = "";
       int portNum = 80; // default if no other portnumbers are found
       try {
         int c = 0;
@@ -124,15 +129,18 @@ public class Proxy {
           if (request.length() >= 12 && request.substring(0, 12).equalsIgnoreCase("Connection: ")) {
             request = "Connection: close";
           // save the host in an url so we can connect via tcp
-          } else if (request.length() >= 7 && request.substring(0, 6).equalsIgnoreCase("Host: ")) {
-            // change to 6, because index 6 is beganing of addr, if 7 that will take first 'w' of of the addr
+          } else if (request.length() >= 17 && request.substring(0, 17).equalsIgnoreCase("Proxy-connection:")) {
+            request = "Proxy-connection: close";
+          // save the host in an url so we can connect via tcp
+          } 
+          /*else if (request.length() >= 7 && request.substring(0, 6).equalsIgnoreCase("Host: ")) {
             String temp = request.substring(6);
             String[] splitted = temp.split(":");
             url = splitted[0];
             if (splitted.length == 2) { // there is a portnumber given with the host
               portNum = Integer.parseInt(splitted[1]);
             }
-          }
+          }*/
           // Add the newline at the end of the line
           editedReq += "\r\n";
           editedReq += request; // build up header to send to server
@@ -140,6 +148,9 @@ public class Proxy {
         editedReq += "\r\n\r\n";
       } catch (IOException e) {
         e.printStackTrace();
+      }
+      if (!url.contains("http")) {
+        continue;
       }
       if (url.substring(0, 5).equalsIgnoreCase("https")) {
     	  portNum = 443;
@@ -153,12 +164,12 @@ public class Proxy {
         hostIn = socket.getInputStream();
         hostOut = socket.getOutputStream();
       } catch (IOException e) {
-        e.printStackTrace();
       }
      
      byte[] req = editedReq.getBytes();
       try {
-        hostOut.write(req, 0, req.length);
+        System.out.println(req);
+        hostOut.write(req);
         hostOut.flush();
       } catch (IOException e) {
         e.printStackTrace();
@@ -169,11 +180,10 @@ public class Proxy {
       try {
         while((bytes_read = hostIn.read(buffer)) != -1) {
 //          System.out.print(buffer);
-           clientOut.write(buffer, 0, bytes_read);
+           clientOut.write(buffer);
            clientOut.flush();
         }
-      }catch (IOException e) {}
-      
+      } catch (IOException e) {}
       try{
         clientIn.close();
         clientOut.close();
@@ -182,9 +192,10 @@ public class Proxy {
       } catch (IOException e) { /* failed */ }
 
     }
+    }
     private void tunnel(InputStream clientIn,OutputStream clientOut, String request) {
       String tunnelHost, temp;
-      int tunnelPort;
+      int tunnelPort , buf;
       Socket serverSocket = null;
       InputStream serverIn = null;
       OutputStream serverOut = null;
@@ -231,6 +242,39 @@ public class Proxy {
       } catch (IOException e1) {
         e1.printStackTrace();
       }
+
+      try {
+        while((clientIn.available() > 0) || (serverIn.available() > 0)) {
+          buf = clientIn.read();
+          while(buf != -1) {
+            serverOut.write(buf);
+            buf = clientIn.read();
+          }
+          serverOut.flush();
+          buf = serverIn.read();
+          while(buf != -1){
+            clientOut.write(buf);
+          }
+          clientOut.flush();
+          if((clientIn.available() == 0) && (serverIn.available() == 0)){
+            // wait 100ms for respons.
+            try {
+              Thread.sleep(100);
+            } catch(InterruptedException ex) {
+              Thread.currentThread().interrupt();
+            }
+          }
+        }
+      } catch(IOException e) {
+        e.printStackTrace(System.err);
+      }finally {
+        try {
+          serverIn.close();
+          serverOut.close();
+          serverSocket.close();
+          System.out.print("server socket closed");
+        } catch (IOException e) { /* failed */ }
+      } 
 
     }
   }
