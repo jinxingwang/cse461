@@ -46,14 +46,12 @@ public class Proxy {
   }
   
   private static class uHandler implements Runnable {
-    private Socket con;
-    private Socket servSock = null;
-    
+    private Socket clientSocket;
     
     // constrctor
     public uHandler(Socket sock) {
       if(sock != null){
-        con = sock;
+        clientSocket = sock;
       } else {
         throw new IllegalArgumentException();
       }
@@ -64,12 +62,12 @@ public class Proxy {
       InputStream clientIn = null;
       OutputStream clientOut = null;
       try {
-        clientIn = con.getInputStream();
+        clientIn = clientSocket.getInputStream();
       } catch (IOException e1) {
         e1.printStackTrace();
       }
       try {
-        clientOut = con.getOutputStream();
+        clientOut = clientSocket.getOutputStream();
       } catch (IOException e1) {
         e1.printStackTrace();
       }
@@ -93,7 +91,8 @@ public class Proxy {
         try{
           clientIn.close();
           clientOut.close();
-          con.close();
+          clientSocket.close();
+          System.out.println(" tunneling connection closed");
         } catch (IOException e) { /* failed */ }
         return;
       }
@@ -174,20 +173,65 @@ public class Proxy {
            clientOut.flush();
         }
       }catch (IOException e) {}
-      try {
-          while((bytes_read = clientIn.read(buffer)) != -1) {
-            System.out.print(buffer);
-             clientIn.read(buffer, 0, bytes_read);
-          }
-      }catch (IOException e) {}
+      
       try{
         clientIn.close();
         clientOut.close();
-        con.close();
+        clientSocket.close(); 
+        System.out.println(" non-connection closed");
       } catch (IOException e) { /* failed */ }
 
     }
-    private void tunnel(OutputStream clientIn,InputStream clientOut, String request) {
+    private void tunnel(InputStream clientIn,OutputStream clientOut, String request) {
+      String tunnelHost, temp;
+      int tunnelPort;
+      Socket serverSocket = null;
+      InputStream serverIn = null;
+      OutputStream serverOut = null;
+      byte[] rsp;
+
+      // cut off Connect at beganing
+      request = request.substring(8,request.length());
+      
+      // get addr and port
+      String[] splitted = request.split(":");
+      if( splitted.length != 2){
+        System.out.println("wrong CONNECT request format");
+        return;
+      }
+      tunnelHost = splitted[0];
+      tunnelPort = Integer.parseInt(splitted[1]);
+
+      // try to connect to server
+      try {
+        serverSocket  = new Socket(tunnelHost, tunnelPort);
+        temp = "HTTP/1.0 200 OK\r\n\r\n";
+        rsp = temp.getBytes();
+        try {
+          clientOut.write(rsp);
+          clientOut.flush();
+        }catch (IOException e) {}
+      }  catch (IOException e1) {
+        temp = "HTTP/1.0 502 Bad Gateway\r\n\r\n";
+        rsp = temp.getBytes();
+        try {
+          clientOut.write(rsp);
+          clientOut.flush();
+        } catch (IOException e) {}
+        return;
+      }
+      
+      try {
+        serverIn = serverSocket.getInputStream();
+      } catch (IOException e1) {
+        e1.printStackTrace();
+      }
+      try {
+        serverOut = serverSocket.getOutputStream();
+      } catch (IOException e1) {
+        e1.printStackTrace();
+      }
+
     }
   }
 }
