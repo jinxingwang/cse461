@@ -305,14 +305,15 @@ public class Proxy {
       byte[] buf = new byte[2048];
       int i;
       try {
-        while(((i = In.read(buf,0,buf.length))!=-1) && socket.isConnected() && ((i = In.read(buf,0,buf.length))!=0)){
-          System.out.print(buf);
-          Out.write(buf);
+        while(((i = In.read(buf,0,buf.length))!=-1) && socket.isConnected() &&
+        		((i/* = In.read(buf,0,buf.length)*/)!=0)){
+//          System.out.print(buf);
+          Out.write(buf, 0, i);
           Out.flush();
         }
       } catch(IOException e) {
         return;
-        // e.printStackTrace();
+//         e.printStackTrace();
       }
     }
   }
