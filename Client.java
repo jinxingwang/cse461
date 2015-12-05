@@ -18,8 +18,8 @@ public class Client {
     public static void main(String[] args) throws Exception {
         ////////////////////STAGE A//////////////////////////////////////////
         int portNum = 12235;
-        InetAddress ip=InetAddress.getLocalHost();
-        // InetAddress ip=InetAddress.getByName("attu2.cs.washington.edu");
+//        InetAddress ip=InetAddress.getLocalHost();
+        InetAddress ip=InetAddress.getByName("attu2.cs.washington.edu");
 
         DatagramSocket sock = new DatagramSocket();
 
